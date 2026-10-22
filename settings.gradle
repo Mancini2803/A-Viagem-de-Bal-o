@@ -1,0 +1,5 @@
+rootProject.name = 'EscaladaEspacial'
+
+// core   = o jogo (libGDX + jSerialComm)
+// lwjgl3 = lancador para Desktop (Windows, Linux, macOS)
+include 'core', 'lwjgl3'

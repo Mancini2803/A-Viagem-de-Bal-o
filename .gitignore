@@ -1,0 +1,7 @@
+.gradle/
+build/
+out/
+.idea/*
+!.idea/runConfigurations/
+*.iml
+assets/metricas/

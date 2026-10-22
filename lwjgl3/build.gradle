@@ -1,0 +1,28 @@
+plugins {
+    id 'application'
+}
+
+dependencies {
+    implementation project(':core')
+    api "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+    api "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+application {
+    mainClass = 'com.escalada.lwjgl3.Lwjgl3Launcher'
+}
+
+// A pasta "assets" da raiz fica no classpath (sons opcionais acerto.wav / erro.wav).
+sourceSets.main.resources.srcDirs += [rootProject.file('assets')]
+
+tasks.named('run') {
+    // Ao rodar pelo Gradle, o jogo usa "assets" como pasta de trabalho
+    // (e o CSV de metricas e gravado em assets/metricas).
+    workingDir = rootProject.file('assets')
+    standardInput = System.in
+    ignoreExitValue = true
+    // No macOS o LWJGL3 exige esta opcao.
+    if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+        jvmArgs += '-XstartOnFirstThread'
+    }
+}

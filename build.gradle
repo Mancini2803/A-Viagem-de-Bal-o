@@ -1,0 +1,16 @@
+// Configuracao comum a todos os modulos.
+allprojects {
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    // Compila para Java 11 (funciona com JDK 11, 17, 21...).
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 11
+    }
+}
