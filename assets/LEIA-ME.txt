@@ -1,0 +1,1 @@
+Sons opcionais: coloque aqui "acerto.wav" e "erro.wav". Se nao existirem, o jogo roda sem som.
