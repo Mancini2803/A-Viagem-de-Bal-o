@@ -26,3 +26,17 @@ tasks.named('run') {
         jvmArgs += '-XstartOnFirstThread'
     }
 }
+
+// Gera o executavel unico (jar com tudo dentro):  gradlew lwjgl3:dist
+// Resultado: lwjgl3/build/libs/EscaladaEspacial.jar  ->  java -jar EscaladaEspacial.jar
+tasks.register('dist', Jar) {
+    archiveFileName = 'EscaladaEspacial.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    from sourceSets.main.output
+    exclude 'META-INF/INDEX.LIST', 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    manifest {
+        attributes 'Main-Class': application.mainClass.get()
+    }
+}
