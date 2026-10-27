@@ -27,8 +27,11 @@ import com.escalada.serial.SerialListener.Entrada;
  * Tela principal do jogo "Escalada Espacial".
  *
  * Maquina de estados:
- *   ESPERANDO_INICIO -> JOGANDO -> CHEGADA (sobe ate o Destino Final) -> RESUMO
- *   -> (proxima fase: ESPERANDO_INICIO) ... -> FIM -> ESPERANDO_INICIO
+ *   MENU -> ESPERANDO_INICIO -> JOGANDO <-> PAUSADO
+ *   JOGANDO -> CHEGADA (sobe ate o Destino Final) -> RESUMO -> (proxima fase: ESPERANDO_INICIO) ... -> FIM -> MENU
+ *
+ * Menu principal e pausa: pelos botoes do painel (ESQUERDA / ALTO / DIREITA) ou pelo teclado do terapeuta
+ * (ENTER, P, R, M, ESC). A jogada em si e controlada somente pelo painel.
  *
  * O paciente navega SO pelo painel: qualquer botao avanca as telas de texto.
  * O tempo de resposta e medido entre o acendimento da agarradeira e o instante (System.nanoTime)
@@ -38,7 +41,7 @@ import com.escalada.serial.SerialListener.Entrada;
  */
 public class GameScreen extends ScreenAdapter {
 
-    private enum Estado { ESPERANDO_INICIO, JOGANDO, CHEGADA, RESUMO, FIM }
+    private enum Estado { MENU, ESPERANDO_INICIO, JOGANDO, PAUSADO, CHEGADA, RESUMO, FIM }
 
     private static class Particula { float x, y, vx, vy, vida; Color cor; }
     private static class Onda { float x, y, vida; Color cor; }
@@ -68,13 +71,16 @@ public class GameScreen extends ScreenAdapter {
     private final Array<Confete> confetes = new Array<>();
 
     private Metricas metricas = new Metricas();
-    private Estado estado = Estado.ESPERANDO_INICIO;
+    private Estado estado = Estado.MENU;
     private int indiceFase = 0;
     private Fase fase = Fase.TODAS[0];
 
     // Progresso da fase
     private int alvosResolvidos, acertos, erros, omissoes, passos, sequenciaAcertos;
     private int pontos;
+    private int pontosInicioFase;          // para restaurar a pontuacao ao reiniciar a fase
+    private int faseInicial;               // fase escolhida no menu principal
+    private long pausaInicioNs;            // para nao contar o tempo parado no tempo de resposta
     private Direcao alvoAtivo, ultimoAlvo;
     private long acendimentoNs;
     private float pausa;
@@ -128,10 +134,7 @@ public class GameScreen extends ScreenAdapter {
         float dt = Math.min(delta, 0.05f);
         tempo += dt;
 
-        if (Gdx.input.isKeyJustPressed(Keys.ESCAPE)) {
-            Gdx.app.exit();
-            return;
-        }
+        if (tratarTeclas()) return;
 
         coletarEntradas();
         if (bloqueioEntrada > 0f) {
@@ -140,11 +143,17 @@ public class GameScreen extends ScreenAdapter {
         }
 
         switch (estado) {
+            case MENU:
+                atualizarMenu();
+                break;
             case ESPERANDO_INICIO:
                 if (entradas.size > 0) iniciarFase();
                 break;
             case JOGANDO:
                 atualizarJogo(dt);
+                break;
+            case PAUSADO:
+                atualizarPausa();
                 break;
             case CHEGADA:
                 atualizarChegada(dt);
@@ -177,7 +186,127 @@ public class GameScreen extends ScreenAdapter {
 
     // ================================================================ LOGICA
 
+    /** Atalhos do terapeuta (menu e pausa). Retorna true se o aplicativo esta sendo encerrado. */
+    private boolean tratarTeclas() {
+        boolean esc = Gdx.input.isKeyJustPressed(Keys.ESCAPE);
+        boolean p = Gdx.input.isKeyJustPressed(Keys.P);
+        boolean r = Gdx.input.isKeyJustPressed(Keys.R);
+        boolean m = Gdx.input.isKeyJustPressed(Keys.M);
+        boolean enter = Gdx.input.isKeyJustPressed(Keys.ENTER);
+
+        switch (estado) {
+            case MENU:
+                if (esc) {
+                    Gdx.app.exit();
+                    return true;
+                }
+                if (enter) iniciarJogo();
+                break;
+            case JOGANDO:
+                if (esc || p) pausar();
+                else if (r) reiniciarFase();
+                break;
+            case PAUSADO:
+                if (esc || p) continuar();
+                else if (r) reiniciarFase();
+                else if (m) voltarAoMenu();
+                break;
+            default:
+                if (esc) voltarAoMenu();
+                break;
+        }
+        return false;
+    }
+
+    // ---- Menu principal: ESQUERDA = iniciar, ALTO = trocar a fase inicial ----
+    private void atualizarMenu() {
+        for (int i = 0; i < entradas.size; i++) {
+            Direcao d = entradas.get(i).direcao;
+            if (d == Direcao.ESQUERDA) {
+                iniciarJogo();
+                return;
+            }
+            if (d == Direcao.ALTO) {
+                faseInicial = (faseInicial + 1) % Fase.TODAS.length;
+            }
+        }
+    }
+
+    /** Nova sessao: zera metricas e pontos e mostra a introducao da fase escolhida. */
+    private void iniciarJogo() {
+        metricas = new Metricas();
+        arquivoCsv = null;
+        pontos = 0;
+        indiceFase = faseInicial;
+        fase = Fase.TODAS[indiceFase];
+        alturaVisual = 0f;
+        passos = 0;
+        astro.resetar();
+        estado = Estado.ESPERANDO_INICIO;
+        bloqueioEntrada = 0.4f;
+    }
+
+    // ---- Pausa: ESQUERDA = continuar, ALTO = reiniciar fase, DIREITA = menu principal ----
+    private void pausar() {
+        pausaInicioNs = System.nanoTime();
+        estado = Estado.PAUSADO;
+        bloqueioEntrada = 0.3f;
+    }
+
+    private void continuar() {
+        // O tempo parado nao pode contar no tempo de resposta do alvo aceso.
+        if (alvoAtivo != null) acendimentoNs += System.nanoTime() - pausaInicioNs;
+        estado = Estado.JOGANDO;
+        bloqueioEntrada = 0.2f;
+    }
+
+    private void atualizarPausa() {
+        for (int i = 0; i < entradas.size; i++) {
+            Direcao d = entradas.get(i).direcao;
+            if (d == Direcao.ESQUERDA) {
+                continuar();
+                return;
+            }
+            if (d == Direcao.ALTO) {
+                reiniciarFase();
+                return;
+            }
+            if (d == Direcao.DIREITA) {
+                voltarAoMenu();
+                return;
+            }
+        }
+    }
+
+    /** Recomeca a fase atual do zero, descartando os dados dela. */
+    private void reiniciarFase() {
+        metricas.removerFase(indiceFase + 1);
+        pontos = pontosInicioFase;
+        particulas.clear();
+        ondas.clear();
+        flutuantes.clear();
+        iniciarFase();
+        bloqueioEntrada = 0.3f;
+    }
+
+    /** Volta ao menu principal. Se ja houver dados da sessao, grava o CSV parcial. */
+    private void voltarAoMenu() {
+        if (metricas.temRegistros() && arquivoCsv == null) {
+            arquivoCsv = metricas.exportarCsv();
+            Gdx.app.log("Metricas", "CSV parcial salvo em " + arquivoCsv.file().getAbsolutePath());
+        }
+        alvoAtivo = null;
+        alturaVisual = 0f;
+        passos = 0;
+        astro.resetar();
+        confetes.clear();
+        estado = Estado.MENU;
+        bloqueioEntrada = 0.4f;
+    }
+
     private void iniciarFase() {
+        pontosInicioFase = pontos;
+        alturaVisual = 0f;
         fase = Fase.TODAS[indiceFase];
         alvosResolvidos = 0;
         acertos = 0;
@@ -240,10 +369,13 @@ public class GameScreen extends ScreenAdapter {
 
         if (e.direcao == alvoAtivo) {
             // ACERTO: astronauta avanca um passo, soma pontos (bonus por rapidez) e toca o efeito.
-            int ganho = 100 + (int) Math.max(0L, 2000L - tempoMs) / 20;
             acertos++;
             passos++;
             sequenciaAcertos++;
+            // Pontuacao = base + velocidade (tempo de resposta) + consistencia (acertos seguidos sem erro).
+            int bonusVelocidade = (int) Math.max(0L, 2000L - tempoMs) / 20;          // ate +100
+            int bonusConsistencia = Math.min(sequenciaAcertos - 1, 6) * 10;          // ate +60
+            int ganho = 100 + bonusVelocidade + bonusConsistencia;
             pontos += ganho;
             ultimoTempoMs = tempoMs;
             metricas.registrar(indiceFase + 1, alvosResolvidos + 1, alvoAtivo, e.direcao, Resultado.ACERTO, tempoMs);
@@ -346,7 +478,7 @@ public class GameScreen extends ScreenAdapter {
         astro.resetar();
         arquivoCsv = null;
         confetes.clear();
-        estado = Estado.ESPERANDO_INICIO;
+        estado = Estado.MENU;
         bloqueioEntrada = 0.5f;
     }
 
@@ -635,6 +767,19 @@ public class GameScreen extends ScreenAdapter {
         s.rect(0, 0, Main.LARGURA, Main.ALTURA);
 
         switch (estado) {
+            case MENU:
+                cartao(s, 170f, 100f, 620f, 360f, Arte.COR_ESQ);
+                opcaoCirculo(s, 380f, 255f, Direcao.ESQUERDA);
+                opcaoCirculo(s, 580f, 255f, Direcao.ALTO);
+                break;
+
+            case PAUSADO:
+                cartao(s, 170f, 110f, 620f, 340f, Arte.DOURADO);
+                for (Direcao d : Direcao.values()) {
+                    opcaoCirculo(s, 330f + d.ordinal() * 150f, 270f, d);
+                }
+                break;
+
             case ESPERANDO_INICIO:
                 cartao(s, 170f, 110f, 620f, 340f, Arte.COR_ESQ);
                 // Legenda: qual botao do painel corresponde a qual cor/seta
@@ -661,6 +806,15 @@ public class GameScreen extends ScreenAdapter {
             default:
                 break;
         }
+    }
+
+    /** Botao redondo do menu com a cor e a seta do botao fisico correspondente. */
+    private void opcaoCirculo(ShapeRenderer s, float x, float y, Direcao d) {
+        Arte.brilho(s, x, y, 62f, Arte.corDe(d), 0.9f);
+        s.setColor(Arte.corDe(d));
+        s.circle(x, y, 27f, 28);
+        s.setColor(0.05f, 0.08f, 0.20f, 1f);
+        Arte.seta(s, x, y, 12f, d);
     }
 
     private void desenharEstrelas(ShapeRenderer s, float cx, float cy, int cheias) {
@@ -708,6 +862,8 @@ public class GameScreen extends ScreenAdapter {
     private void desenharTextos() {
         jogo.batch.begin();
         switch (estado) {
+            case MENU: textosMenu(); break;
+            case PAUSADO: textosPausa(); break;
             case ESPERANDO_INICIO: textosEsperando(); break;
             case JOGANDO: textosJogando(); break;
             case CHEGADA: textosChegada(); break;
@@ -764,6 +920,7 @@ public class GameScreen extends ScreenAdapter {
                 : (ACEITAR_TECLADO ? "Teclado (setas)" : "Painel offline");
         txt(f, 0.85f, 0.9f, 1f, 1f, status, 750f, 42f);
 
+        txt(f, 0.7f, 0.75f, 0.9f, 0.9f, "P = pausar   R = reiniciar fase", 110f, 74f);
         textoDestino();
         textosFlutuantes();
     }
@@ -794,6 +951,35 @@ public class GameScreen extends ScreenAdapter {
         for (int i = 0; i < flutuantes.size; i++) {
             Flutuante fl = flutuantes.get(i);
             txtC(jogo.fonteMedia, fl.cor, Math.max(0f, Math.min(1f, fl.vida)), fl.texto, fl.x, fl.y);
+        }
+    }
+
+    private void textosMenu() {
+        float cx = Main.LARGURA / 2f;
+        txtC(jogo.fonteGrande, Color.WHITE, 1f, "ESCALADA ESPACIAL", cx, 420f);
+        txtC(jogo.fonte, Arte.COR_ESQ, 1f, "Jogo serio para reabilitacao de ombros, cotovelos e bracos", cx, 380f);
+
+        txtC(jogo.fonteMedia, Arte.COR_ESQ, 1f, "Iniciar", 380f, 195f);
+        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Botao ESQUERDA", 380f, 170f);
+        Fase f = Fase.TODAS[faseInicial];
+        txtC(jogo.fonteMedia, Arte.COR_ALTO, 1f, "Fase " + (faseInicial + 1) + ": " + f.nome, 580f, 195f);
+        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Botao ALTO troca a fase", 580f, 170f);
+
+        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.85f, "Teclado: ENTER = iniciar   |   ESC = sair", cx, 138f);
+        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.8f, "Painel: " + jogo.serial.getStatus()
+                + (ACEITAR_TECLADO ? "  |  setas ESQ / CIMA / DIR simulam os botoes" : ""), cx, 116f);
+    }
+
+    private void textosPausa() {
+        float cx = Main.LARGURA / 2f;
+        txtC(jogo.fonteGrande, Arte.DOURADO, 1f, "PAUSADO", cx, 405f);
+        String[] rotulos = { "Continuar", "Reiniciar fase", "Menu principal" };
+        String[] teclas = { "tecla P", "tecla R", "tecla M" };
+        for (Direcao d : Direcao.values()) {
+            float x = 330f + d.ordinal() * 150f;
+            txtC(jogo.fonteMedia, Arte.corDe(d), 1f, rotulos[d.ordinal()], x, 205f);
+            txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Botao " + d.rotulo, x, 178f);
+            txtC(jogo.fonte, Color.LIGHT_GRAY, 0.7f, teclas[d.ordinal()], x, 156f);
         }
     }
 
@@ -837,7 +1023,7 @@ public class GameScreen extends ScreenAdapter {
             txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Dados salvos em metricas/" + arquivoCsv.name(), cx, 158f);
         }
         float pulso = 0.65f + 0.35f * MathUtils.sin(tempo * 4f);
-        txtC(jogo.fonte, Color.WHITE, pulso, "Pressione qualquer botao para jogar de novo", cx, 115f);
+        txtC(jogo.fonte, Color.WHITE, pulso, "Pressione qualquer botao para voltar ao menu", cx, 115f);
     }
 
     private void linhasResumo(Resumo r, float yInicial) {

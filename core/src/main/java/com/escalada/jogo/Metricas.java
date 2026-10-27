@@ -54,6 +54,17 @@ public class Metricas {
         registros.add(new Registro(fase, alvo, esperado, pressionado, resultado, tempoMs));
     }
 
+    /** Descarta os registros de uma fase (usado ao reiniciar a fase). */
+    public void removerFase(int fase) {
+        for (int i = registros.size() - 1; i >= 0; i--) {
+            if (registros.get(i).fase == fase) registros.remove(i);
+        }
+    }
+
+    public boolean temRegistros() {
+        return !registros.isEmpty();
+    }
+
     /** @param fase numero da fase (1, 2, 3...) ou 0 para somar todas as fases. */
     public Resumo resumo(int fase) {
         Resumo r = new Resumo();
