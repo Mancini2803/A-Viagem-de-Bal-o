@@ -15,12 +15,18 @@ import com.escalada.serial.Direcao;
  * Estados: repouso -> alcancando (agarradeira acesa) -> puxando (acerto) -> repouso ... -> celebrando (destino).
  */
 public final class Astronauta {
-    /** Altura (y) em que as solas das botas tocam a plataforma de destino quando o astronauta chega. */
-    public static final float Y_SOLA = 66f;
+    /**
+     * Altura (y) em que as solas das botas tocam a plataforma de destino quando o astronauta chega.
+     * Vale para o quadril em y = 180 (ASTRO_Y do GameScreen) e ESCALA = 0.75.
+     */
+    public static final float Y_SOLA = 94.5f;
+
+    /** Tamanho do astronauta na tela (1 = tamanho original do desenho). */
+    private static final float ESCALA = 0.75f;
 
     private static final float DURACAO_PUXADA = 0.55f;
     private static final float AFUNDA = 70f;           // quanto a agarradeira desce em relacao ao corpo na puxada
-    private static final float BRACO_1 = 68f, BRACO_2 = 64f;
+    private static final float BRACO_1 = 88f, BRACO_2 = 84f;
     private static final float PERNA_1 = 50f, PERNA_2 = 50f;
 
     private final float cx;
@@ -108,7 +114,8 @@ public final class Astronauta {
         }
         lean += (alvoLean - lean) * Math.min(1f, 9f * dt);
 
-        // Alvos das maos.
+        // Alvos das maos, em coordenadas LOCAIS do astronauta (ele e desenhado com escala ESCALA).
+        // Posicoes de tela (agarradeiras) sao convertidas com lx() e ly().
         float restoEsqX = cx - 58f, restoDirX = cx + 58f, restoY = baseY + 30f;
         float aEx = restoEsqX, aEy = restoY, aDx = restoDirX, aDy = restoY;
         boolean agarrando = false;
@@ -124,17 +131,17 @@ public final class Astronauta {
             float gy = grabY - AFUNDA * k;
             agarrando = true;
             switch (dirPuxada) {
-                case ESQUERDA: aEx = grabX; aEy = gy; break;
-                case DIREITA:  aDx = grabX; aDy = gy; break;
-                default:       aEx = grabX - 16f; aEy = gy; aDx = grabX + 16f; aDy = gy; break;
+                case ESQUERDA: aEx = lx(grabX); aEy = ly(gy); break;
+                case DIREITA:  aDx = lx(grabX); aDy = ly(gy); break;
+                default:       aEx = lx(grabX - 16f); aEy = ly(gy); aDx = lx(grabX + 16f); aDy = ly(gy); break;
             }
         } else if (alvo != null) {
             float hx = holdX[alvo.ordinal()];
             float hy = holdY[alvo.ordinal()];
             switch (alvo) {
-                case ESQUERDA: aEx = hx; aEy = hy; break;
-                case DIREITA:  aDx = hx; aDy = hy; break;
-                default:       aEx = hx - 16f; aEy = hy; aDx = hx + 16f; aDy = hy; break;
+                case ESQUERDA: aEx = lx(hx); aEy = ly(hy); break;
+                case DIREITA:  aDx = lx(hx); aDy = ly(hy); break;
+                default:       aEx = lx(hx - 16f); aEy = ly(hy); aDx = lx(hx + 16f); aDy = ly(hy); break;
             }
         }
 
@@ -145,6 +152,15 @@ public final class Astronauta {
         else { maoEsqX += (aEx - maoEsqX) * suave; maoEsqY += (aEy - maoEsqY) * suave; }
         if (exato && dirPuxada != Direcao.ESQUERDA) { maoDirX = aDx; maoDirY = aDy; }
         else { maoDirX += (aDx - maoDirX) * suave; maoDirY += (aDy - maoDirY) * suave; }
+    }
+
+    /** Converte uma posicao de tela para as coordenadas locais do astronauta (desfaz a escala). */
+    private float lx(float sx) {
+        return cx + (sx - cx) / ESCALA;
+    }
+
+    private float ly(float sy) {
+        return baseY + (sy - baseY) / ESCALA;
     }
 
     // ================================================================ DESENHO
@@ -206,12 +222,18 @@ public final class Astronauta {
         rx = MathUtils.cos(lean);
         ry = MathUtils.sin(lean);
 
-        desenharPegada(s);
+        desenharPegada(s);                       // em coordenadas de tela, fora da escala
+
+        // O corpo e desenhado em tamanho original e reduzido em torno do quadril.
+        s.translate(cx, baseY, 0f);
+        s.scale(ESCALA, ESCALA, 1f);
+        s.translate(-cx, -baseY, 0f);
         desenharMochila(s, tempo);
         desenharPernas(s, dy);
         desenharTronco(s, tempo);
         desenharBracos(s);
         desenharCabeca(s, tempo);
+        s.identity();
     }
 
     /** Brilho da agarradeira que o astronauta esta segurando (desce junto com a mao e some). */
