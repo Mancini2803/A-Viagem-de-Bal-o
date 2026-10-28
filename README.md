@@ -43,14 +43,16 @@ core/                                                o jogo
     telas/GameScreen.java      estados do jogo, fases, tempo de resposta e renderizacao
 lwjgl3/                                              lancador Desktop
   src/main/java/com/escalada/lwjgl3/Lwjgl3Launcher.java
-assets/                                              (opcional) acerto.wav e erro.wav
+assets/                                              musica.ogg, acerto.wav, erro.wav
+tools/gerar_audio.py                                 gera a musica e os efeitos sonoros (composicao original)
 arduino/EscaladaEspacial/EscaladaEspacial.ino        firmware com debounce
 .idea/runConfigurations/Jogar.xml                    botao de play "Jogar"
 ```
 
 ## Menu, pausa e controles
 
-- **Menu principal:** botao ESQUERDA = iniciar; botao ALTO = trocar a fase inicial (ENTER inicia pelo teclado; ESC sai).
+- **Menu principal:** botao ESQUERDA = iniciar; botao ALTO = trocar a fase inicial; botao DIREITA = tela "Como jogar"
+  (pelo teclado: ENTER inicia, H abre a ajuda, ESC fecha a ajuda ou sai).
 - **Pausa:** tecla P ou ESC durante o jogo. No menu de pausa: ESQUERDA (ou P) = continuar, ALTO (ou R) = reiniciar a fase,
   DIREITA (ou M) = menu principal. O tempo parado nao entra no tempo de resposta.
 - **Reiniciar a fase:** tecla R durante o jogo ou pela pausa (descarta os dados da fase reiniciada).
@@ -69,6 +71,14 @@ Ligue cada botao entre o pino e o GND: esquerdo no pino 2, alto no 3, direito no
 Abra o `.ino` na Arduino IDE, selecione "Arduino Uno" e a porta, e envie.
 Teste no Monitor Serial (9600): cada clique deve imprimir `L`, `U` ou `R`.
 **Feche o Monitor Serial** antes de abrir o jogo (so um programa usa a porta por vez).
+
+## Audio
+
+- **Musica de fundo** em loop (`assets/musica.ogg`), composicao original sintetizada por codigo em `tools/gerar_audio.py`
+  (sem direitos autorais de terceiros). Tecla **N** liga/desliga. Se o arquivo faltar, o jogo roda sem musica.
+- **Efeitos:** `acerto.wav` (sino subindo) e `erro.wav` (zumbido curto). Para trocar, use arquivos com os mesmos nomes.
+- Para regerar ou mudar o estilo: `pip install numpy`, edite o topo do script e rode `python3 tools/gerar_audio.py`;
+  depois, opcionalmente, `ffmpeg -y -i assets/musica.wav -c:a libvorbis -q:a 4 assets/musica.ogg`.
 
 ## Visual
 
@@ -93,7 +103,8 @@ Todo o visual e desenhado por codigo (sem imagens), entao nao ha arquivos de art
 - Teste sem Arduino: setas ESQUERDA / CIMA / DIREITA (`ACEITAR_TECLADO` em `GameScreen.java`).
   Coloque `false` nos testes com pacientes.
 - Dificuldade: edite a lista `TODAS` em `Fase.java`.
-- A interface usa texto sem acentos porque a fonte padrao do libGDX nao os cobre bem.
+- Fontes: o jogo usa fontes TrueType do proprio sistema (Segoe UI no Windows, Arial no macOS, DejaVu no Linux) para o texto ficar nitido;
+  se nao encontrar nenhuma, usa a fonte padrao do libGDX (sem acentos). Por isso os textos da interface ainda estao sem acentos.
 - macOS: ao rodar pela seta verde do `Lwjgl3Launcher`, adicione `-XstartOnFirstThread` em
   Run > Edit Configurations > VM options (a configuracao "Jogar" do Gradle ja faz isso).
 
