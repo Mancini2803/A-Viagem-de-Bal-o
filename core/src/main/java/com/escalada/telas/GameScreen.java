@@ -52,9 +52,9 @@ public class GameScreen extends ScreenAdapter {
     private static final boolean ACEITAR_TECLADO = true;
 
     // Posicoes das agarradeiras na tela, na ordem do enum Direcao: ESQUERDA, ALTO, DIREITA.
-    private static final float[] HOLD_X = { 352f, 480f, 608f };
-    private static final float[] HOLD_Y = { 318f, 380f, 318f };
-    private static final float RAIO_HOLD = 34f;
+    private static final float[] HOLD_X = { 368f, 480f, 592f };
+    private static final float[] HOLD_Y = { 296f, 346f, 296f };
+    private static final float RAIO_HOLD = 30f;
     private static final float ASTRO_X = 480f;
     private static final float ASTRO_Y = 180f;           // altura do quadril do astronauta
     private static final float PIXELS_POR_PASSO = 70f;
@@ -95,6 +95,12 @@ public class GameScreen extends ScreenAdapter {
     private float tempo;
     private float flash;
     private float tremor;
+
+    // Menu principal
+    private boolean mostrarAjuda;
+    private final Astronauta astroMenu = new Astronauta(770f, 235f);
+    private final Color corMenuEscuro = new Color(0.02f, 0.03f, 0.10f, 0.88f);
+    private final Color corMenuClaro = new Color(0.02f, 0.03f, 0.10f, 0f);
     private final Color corFlash = new Color(Color.GREEN);
     private float alturaVisual;
 
@@ -111,6 +117,7 @@ public class GameScreen extends ScreenAdapter {
         // Sons opcionais: coloque acerto.wav e erro.wav na pasta assets. Se nao existirem, o jogo segue sem som.
         somAcerto = carregarSom("acerto.wav");
         somErro = carregarSom("erro.wav");
+        astroMenu.celebrar();
         bloqueioEntrada = 0.5f;
     }
 
@@ -193,14 +200,23 @@ public class GameScreen extends ScreenAdapter {
         boolean r = Gdx.input.isKeyJustPressed(Keys.R);
         boolean m = Gdx.input.isKeyJustPressed(Keys.M);
         boolean enter = Gdx.input.isKeyJustPressed(Keys.ENTER);
+        boolean h = Gdx.input.isKeyJustPressed(Keys.H);
+        if (Gdx.input.isKeyJustPressed(Keys.N)) jogo.alternarMusica();
 
         switch (estado) {
             case MENU:
                 if (esc) {
-                    Gdx.app.exit();
-                    return true;
+                    if (mostrarAjuda) {
+                        mostrarAjuda = false;
+                    } else {
+                        Gdx.app.exit();
+                        return true;
+                    }
+                } else if (h) {
+                    mostrarAjuda = !mostrarAjuda;
+                } else if (enter && !mostrarAjuda) {
+                    iniciarJogo();
                 }
-                if (enter) iniciarJogo();
                 break;
             case JOGANDO:
                 if (esc || p) pausar();
@@ -222,12 +238,19 @@ public class GameScreen extends ScreenAdapter {
     private void atualizarMenu() {
         for (int i = 0; i < entradas.size; i++) {
             Direcao d = entradas.get(i).direcao;
+            if (mostrarAjuda) {                 // qualquer botao fecha a ajuda
+                mostrarAjuda = false;
+                return;
+            }
             if (d == Direcao.ESQUERDA) {
                 iniciarJogo();
                 return;
             }
             if (d == Direcao.ALTO) {
                 faseInicial = (faseInicial + 1) % Fase.TODAS.length;
+            } else if (d == Direcao.DIREITA) {
+                mostrarAjuda = true;
+                return;
             }
         }
     }
@@ -236,6 +259,7 @@ public class GameScreen extends ScreenAdapter {
     private void iniciarJogo() {
         metricas = new Metricas();
         arquivoCsv = null;
+        mostrarAjuda = false;
         pontos = 0;
         indiceFase = faseInicial;
         fase = Fase.TODAS[indiceFase];
@@ -300,6 +324,7 @@ public class GameScreen extends ScreenAdapter {
         passos = 0;
         astro.resetar();
         confetes.clear();
+        mostrarAjuda = false;
         estado = Estado.MENU;
         bloqueioEntrada = 0.4f;
     }
@@ -607,6 +632,7 @@ public class GameScreen extends ScreenAdapter {
         }
 
         astro.atualizar(dt, (estado == Estado.JOGANDO) ? alvoAtivo : null, HOLD_X, HOLD_Y);
+        astroMenu.atualizar(dt, null, HOLD_X, HOLD_Y);
     }
 
     // ================================================================ DESENHO (formas)
@@ -626,14 +652,18 @@ public class GameScreen extends ScreenAdapter {
         s.begin(ShapeType.Filled);
 
         cenario.desenhar(s, alturaVisual, tempo, indiceFase, alturaDestino());
-        desenharAgarradeiras(s);
-        desenharEfeitos(s);
-        astro.desenhar(s, tempo);
+        if (estado == Estado.MENU) {
+            desenharMenu(s);
+        } else {
+            desenharAgarradeiras(s);
+            desenharEfeitos(s);
+            astro.desenhar(s, tempo);
 
-        if (estado == Estado.JOGANDO) {
-            desenharHud(s);
-        } else if (estado != Estado.CHEGADA) {
-            desenharOverlay(s);
+            if (estado == Estado.JOGANDO) {
+                desenharHud(s);
+            } else if (estado != Estado.CHEGADA) {
+                desenharOverlay(s);
+            }
         }
         desenharConfetes(s);
 
@@ -767,12 +797,6 @@ public class GameScreen extends ScreenAdapter {
         s.rect(0, 0, Main.LARGURA, Main.ALTURA);
 
         switch (estado) {
-            case MENU:
-                cartao(s, 170f, 100f, 620f, 360f, Arte.COR_ESQ);
-                opcaoCirculo(s, 380f, 255f, Direcao.ESQUERDA);
-                opcaoCirculo(s, 580f, 255f, Direcao.ALTO);
-                break;
-
             case PAUSADO:
                 cartao(s, 170f, 110f, 620f, 340f, Arte.DOURADO);
                 for (Direcao d : Direcao.values()) {
@@ -817,6 +841,68 @@ public class GameScreen extends ScreenAdapter {
         Arte.seta(s, x, y, 12f, d);
     }
 
+    private static final float[] MENU_Y = { 272f, 188f, 104f };   // base de cada botao do menu
+    private static final float MENU_X = 60f;
+    private static final float MENU_L = 460f;
+    private static final float MENU_A = 74f;
+
+    /** Menu principal: titulo, tres botoes (um por botao fisico) e o astronauta comemorando. */
+    private void desenharMenu(ShapeRenderer s) {
+        // Escurece o lado esquerdo para destacar o titulo e os botoes.
+        s.rect(0, 0, 640f, Main.ALTURA, corMenuEscuro, corMenuClaro, corMenuClaro, corMenuEscuro);
+
+        // Brilho atras do titulo e barra com as tres cores dos botoes.
+        Arte.brilho(s, 230f, 450f, 240f, Arte.COR_ESQ, 0.22f);
+        s.setColor(Arte.COR_ESQ);
+        s.rect(62f, 388f, 72f, 5f);
+        s.setColor(Arte.COR_ALTO);
+        s.rect(138f, 388f, 72f, 5f);
+        s.setColor(Arte.COR_DIR);
+        s.rect(214f, 388f, 72f, 5f);
+
+        // Astronauta comemorando, com brilho colorido atras.
+        Arte.brilho(s, 780f, 300f, 200f, Arte.COR_ALTO, 0.45f);
+        Arte.brilho(s, 780f, 300f, 130f, Arte.COR_ESQ, 0.35f);
+        astroMenu.desenhar(s, tempo);
+
+        botaoMenu(s, MENU_X, MENU_Y[0], MENU_L, MENU_A, Direcao.ESQUERDA, true);
+        botaoMenu(s, MENU_X, MENU_Y[1], MENU_L, MENU_A, Direcao.ALTO, false);
+        botaoMenu(s, MENU_X, MENU_Y[2], MENU_L, MENU_A, Direcao.DIREITA, false);
+
+        // Indicador de conexao do painel.
+        if (jogo.serial.isConectado()) s.setColor(0.35f, 0.95f, 0.5f, 1f);
+        else s.setColor(1f, 0.65f, 0.25f, 1f);
+        s.circle(70f, 40f, 6f, 12);
+
+        if (mostrarAjuda) {
+            s.setColor(0f, 0f, 0f, 0.6f);
+            s.rect(0, 0, Main.LARGURA, Main.ALTURA);
+            cartao(s, 150f, 90f, 660f, 360f, Arte.DOURADO);
+            for (Direcao d : Direcao.values()) {
+                opcaoCirculo(s, 330f + d.ordinal() * 150f, 335f, d);
+            }
+        }
+    }
+
+    /** Botao do menu: icone com a seta, area de texto e uma "etiqueta" com o nome do botao fisico. */
+    private void botaoMenu(ShapeRenderer s, float x, float y, float w, float h, Direcao d, boolean destaque) {
+        Color c = Arte.corDe(d);
+        if (destaque) {
+            Arte.brilho(s, x + w / 2f, y + h / 2f, w * 0.55f, c, 0.35f + 0.20f * MathUtils.sin(tempo * 4f));
+        }
+        cartao(s, x, y, w, h, c);
+
+        // Icone redondo com a seta
+        s.setColor(c);
+        s.circle(x + 44f, y + h / 2f, 26f, 28);
+        s.setColor(0.05f, 0.08f, 0.20f, 1f);
+        Arte.seta(s, x + 44f, y + h / 2f, 12f, d);
+
+        // Etiqueta com o nome do botao fisico (cor escurecida da propria cor do botao)
+        s.setColor(c.r * 0.22f + 0.04f, c.g * 0.22f + 0.05f, c.b * 0.22f + 0.08f, 1f);
+        Arte.retanguloArredondado(s, x + w - 120f, y + h / 2f - 15f, 104f, 30f, 15f);
+    }
+
     private void desenharEstrelas(ShapeRenderer s, float cx, float cy, int cheias) {
         for (int k = 0; k < 3; k++) {
             float x = cx + (k - 1) * 76f;
@@ -859,6 +945,11 @@ public class GameScreen extends ScreenAdapter {
         jogo.textoCentro(f, t, cx, y);
     }
 
+    private void txtL(BitmapFont f, Color c, float a, String t, float x, float y) {
+        f.setColor(c.r, c.g, c.b, a);
+        jogo.texto(f, t, x, y);
+    }
+
     private void desenharTextos() {
         jogo.batch.begin();
         switch (estado) {
@@ -873,6 +964,7 @@ public class GameScreen extends ScreenAdapter {
         jogo.fonte.setColor(Color.WHITE);
         jogo.fonteMedia.setColor(Color.WHITE);
         jogo.fonteGrande.setColor(Color.WHITE);
+        jogo.fonteTitulo.setColor(Color.WHITE);
         jogo.batch.end();
     }
 
@@ -904,7 +996,8 @@ public class GameScreen extends ScreenAdapter {
         for (Direcao d : Direcao.values()) {
             int i = d.ordinal();
             float a = (d == alvoAtivo) ? 1f : 0.5f;
-            txtC(f, Arte.corDe(d), a, d.rotulo, HOLD_X[i], HOLD_Y[i] - RAIO_HOLD - 16f);
+            float yRotulo = (d == Direcao.ALTO) ? HOLD_Y[i] + RAIO_HOLD + 22f : HOLD_Y[i] - RAIO_HOLD - 16f;
+            txtC(f, Arte.corDe(d), a, d.rotulo, HOLD_X[i], yRotulo);
         }
 
         // Cartao inferior: contadores
@@ -955,19 +1048,52 @@ public class GameScreen extends ScreenAdapter {
     }
 
     private void textosMenu() {
+        if (mostrarAjuda) {
+            textosAjuda();
+            return;
+        }
+        BitmapFont m = jogo.fonteMedia;
+        BitmapFont n = jogo.fonteNota;
+
+        // Titulo e subtitulo
+        txtL(jogo.fonteTitulo, Color.WHITE, 1f, "ESCALADA", 58f, 512f);
+        txtL(jogo.fonteTitulo, Arte.COR_ESQ, 1f, "ESPACIAL", 58f, 450f);
+        txtL(jogo.fonte, Color.LIGHT_GRAY, 0.95f, "Reabilitacao de ombros, cotovelos e bracos", 62f, 374f);
+
+        // Botoes: titulo, descricao curta e o nome do botao fisico na etiqueta
+        Fase inicial = Fase.TODAS[faseInicial];
+        String[] titulos = { "Iniciar jogo", "Trocar fase", "Como jogar" };
+        String[] descricoes = { "Comece a escalada",
+                "Atual: Fase " + (faseInicial + 1) + " - " + inicial.nome,
+                "Instrucoes e dicas" };
+        Direcao[] ds = Direcao.values();
+        for (int i = 0; i < ds.length; i++) {
+            float y = MENU_Y[i];
+            txtL(m, Color.WHITE, 1f, titulos[i], MENU_X + 90f, y + 58f);
+            txtL(n, Color.LIGHT_GRAY, 0.95f, descricoes[i], MENU_X + 90f, y + 28f);
+            txtC(n, Arte.corDe(ds[i]), 1f, ds[i].rotulo, MENU_X + MENU_L - 68f, y + MENU_A / 2f + 7f);
+        }
+
+        // Rodape: atalhos e estado do painel
+        String musica = jogo.temMusica() ? "   N = musica " + (jogo.isMusicaLigada() ? "(ligada)" : "(desligada)") : "";
+        txtL(n, Color.LIGHT_GRAY, 0.85f, "ENTER = iniciar   H = como jogar" + musica + "   ESC = sair", 62f, 74f);
+        txtL(n, Color.LIGHT_GRAY, 0.85f, "Painel: " + jogo.serial.getStatus()
+                + (ACEITAR_TECLADO ? "   |   setas ESQ / CIMA / DIR simulam os botoes" : ""), 84f, 48f);
+    }
+
+    private void textosAjuda() {
         float cx = Main.LARGURA / 2f;
-        txtC(jogo.fonteGrande, Color.WHITE, 1f, "ESCALADA ESPACIAL", cx, 420f);
-        txtC(jogo.fonte, Arte.COR_ESQ, 1f, "Jogo serio para reabilitacao de ombros, cotovelos e bracos", cx, 380f);
-
-        txtC(jogo.fonteMedia, Arte.COR_ESQ, 1f, "Iniciar", 380f, 195f);
-        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Botao ESQUERDA", 380f, 170f);
-        Fase f = Fase.TODAS[faseInicial];
-        txtC(jogo.fonteMedia, Arte.COR_ALTO, 1f, "Fase " + (faseInicial + 1) + ": " + f.nome, 580f, 195f);
-        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.9f, "Botao ALTO troca a fase", 580f, 170f);
-
-        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.85f, "Teclado: ENTER = iniciar   |   ESC = sair", cx, 138f);
-        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.8f, "Painel: " + jogo.serial.getStatus()
-                + (ACEITAR_TECLADO ? "  |  setas ESQ / CIMA / DIR simulam os botoes" : ""), cx, 116f);
+        txtC(jogo.fonteGrande, Arte.DOURADO, 1f, "COMO JOGAR", cx, 425f);
+        for (Direcao d : Direcao.values()) {
+            txtC(jogo.fonte, Arte.corDe(d), 1f, "Botao " + d.rotulo, 330f + d.ordinal() * 150f, 285f);
+        }
+        txtC(jogo.fonte, Color.WHITE, 1f, "Uma agarradeira acende: aperte o botao da mesma cor.", cx, 245f);
+        txtC(jogo.fonte, Color.WHITE, 1f, "Acertou? O astronauta sobe um passo e voce ganha pontos.", cx, 217f);
+        txtC(jogo.fonte, Color.WHITE, 1f, "Quanto mais rapido e sem errar, mais pontos.", cx, 189f);
+        txtC(jogo.fonte, Color.WHITE, 1f, "Resolva todos os alvos para chegar ao Destino Final.", cx, 161f);
+        txtC(jogo.fonte, Color.LIGHT_GRAY, 0.85f, "Durante o jogo: P = pausar   |   R = reiniciar a fase", cx, 133f);
+        float pulso = 0.65f + 0.35f * MathUtils.sin(tempo * 4f);
+        txtC(jogo.fonte, Color.WHITE, pulso, "Aperte qualquer botao para voltar", cx, 108f);
     }
 
     private void textosPausa() {

@@ -1,6 +1,7 @@
 // Modulo do jogo: codigo-fonte em core/src/main/java
 dependencies {
     api "com.badlogicgames.gdx:gdx:$gdxVersion"
+    api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"   // fontes TrueType nitidas
 
     // Leitura da porta Serial (Arduino). Inclui as bibliotecas nativas para Windows, Linux e macOS.
     api "com.fazecast:jSerialComm:$jSerialCommVersion"
