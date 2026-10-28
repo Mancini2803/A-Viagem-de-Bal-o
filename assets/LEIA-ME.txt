@@ -1,1 +1,7 @@
-Sons opcionais: coloque aqui "acerto.wav" e "erro.wav". Se nao existirem, o jogo roda sem som.
+Audio do jogo (composicao original gerada por codigo; veja tools/gerar_audio.py):
+  musica.ogg  - trilha de fundo em loop (se faltar, o jogo tenta musica.wav; se faltar tambem, roda sem musica)
+  acerto.wav  - som de acerto
+  erro.wav    - som de erro
+
+Para trocar por outros arquivos, use os mesmos nomes. Teclas no jogo: N liga/desliga a musica.
+Para regerar o audio: python3 tools/gerar_audio.py (precisa de numpy).
